@@ -3,7 +3,7 @@ Telegram message and callback handlers.
 Contains the business logic for processing Telegram updates.
 """
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application
 from .auth import AuthManager
 
@@ -102,11 +102,86 @@ class TelegramHandlers:
 
         self.auth_manager.log_authorization_attempt(user_id, username, True, "callback")
 
-        # Process authorized callback
+        # Process authorized callback with specific handlers
         try:
-            await self.telegram_app.bot.answer_callback_query(callback_query_id=query_id, text="Button clicked!")
-            await self.telegram_app.bot.send_message(chat_id=chat_id, text=f"You clicked: {data}")
-            return {"callback_processed": data, "authorized": True}
+            # Answer the callback query first (removes loading spinner)
+            await self.telegram_app.bot.answer_callback_query(
+                callback_query_id=query_id,
+                text="Processing..."
+            )
+
+            # Handle different button clicks based on callback_data
+            if data == "main_menu":
+                await self._send_main_menu(chat_id)
+                response_text = "Main menu displayed"
+
+            elif data == "help":
+                response_text = (
+                    "🆘 Help Information:\n\n"
+                    "Available Commands:\n"
+                    "• /start - Show interactive menu\n"
+                    "• /menu - Open main menu\n"
+                    "• /help - Show this help\n"
+                    "• /whoami - Show your info\n"
+                    "• /echo <text> - Echo message\n\n"
+                    "💡 Tip: Use the buttons for quick navigation!"
+                )
+                await self.telegram_app.bot.send_message(chat_id=chat_id, text=response_text)
+
+            elif data == "profile":
+                response_text = f"👤 Your Profile:\n\nUser ID: {user_id}\nUsername: @{username}\nStatus: ✅ Authorized User"
+                await self.telegram_app.bot.send_message(chat_id=chat_id, text=response_text)
+
+            elif data == "stats":
+                import datetime
+                response_text = (
+                    "📊 Bot Statistics:\n\n"
+                    f"• Current time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                    "• Status: 🟢 Online\n"
+                    "• Your interactions: This session\n"
+                    "• Bot version: 1.0.0"
+                )
+                await self.telegram_app.bot.send_message(chat_id=chat_id, text=response_text)
+
+            elif data == "echo_test":
+                response_text = "📝 Echo Test: Hello! This is a test message. Try typing '/echo your message' to test the echo feature!"
+                await self.telegram_app.bot.send_message(chat_id=chat_id, text=response_text)
+
+            elif data == "my_info":
+                response_text = f"🔍 Your Information:\n\nTelegram ID: {user_id}\nUsername: @{username}\nAuthorization: ✅ Verified\n\nYou can use /whoami command anytime!"
+                await self.telegram_app.bot.send_message(chat_id=chat_id, text=response_text)
+
+            elif data == "random_fact":
+                import random
+                facts = [
+                    "🦋 Butterflies taste with their feet!",
+                    "🐙 Octopuses have three hearts!",
+                    "🍯 Honey never spoils - it's been found in Egyptian tombs!",
+                    "🧠 Your brain uses about 20% of your total energy!",
+                    "🌙 A day on Venus is longer than its year!"
+                ]
+                response_text = f"🎲 Random Fact:\n\n{random.choice(facts)}"
+                await self.telegram_app.bot.send_message(chat_id=chat_id, text=response_text)
+
+            elif data == "server_time":
+                import datetime
+                response_text = f"⏰ Server Time:\n\n{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+                await self.telegram_app.bot.send_message(chat_id=chat_id, text=response_text)
+
+            elif data == "back_to_start":
+                await self._send_welcome_with_buttons(chat_id)
+                response_text = "Returned to start menu"
+
+            else:
+                # Unknown button click
+                response_text = f"🤔 Unknown button: {data}"
+                await self.telegram_app.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"🤔 I don't know how to handle: {data}"
+                )
+
+            return {"callback_processed": data, "response": response_text, "authorized": True}
+
         except Exception as e:
             logger.error(f"Failed to process callback query: {str(e)}")
             return {"error": "Failed to process callback query", "authorized": True}
@@ -124,15 +199,22 @@ class TelegramHandlers:
             Response text to send back
         """
         if text.startswith("/start"):
-            return "Hello! I'm your Telegram bot. How can I help you?"
+            await self._send_welcome_with_buttons(user_id)
+            return "Welcome message with interactive buttons sent!"
+
+        elif text.startswith("/menu"):
+            await self._send_main_menu(user_id)
+            return "Main menu displayed"
 
         elif text.startswith("/help"):
             return (
                 "Available commands:\n"
-                "/start - Start the bot\n"
+                "/start - Start the bot with interactive menu\n"
+                "/menu - Show main menu\n"
                 "/help - Show this help message\n"
                 "/echo <text> - Echo your message\n"
-                "/whoami - Show your user information"
+                "/whoami - Show your user information\n\n"
+                "💡 Tip: Use /start to see interactive buttons!"
             )
 
         elif text.startswith("/echo"):
@@ -144,3 +226,48 @@ class TelegramHandlers:
 
         else:
             return f"You sent: {text}\nUse /help to see available commands"
+
+    async def _send_welcome_with_buttons(self, chat_id: int):
+        """Send welcome message with inline keyboard buttons."""
+        keyboard = [
+            [
+                InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu"),
+                InlineKeyboardButton("ℹ️ Help", callback_data="help")
+            ],
+            [
+                InlineKeyboardButton("👤 My Profile", callback_data="profile"),
+                InlineKeyboardButton("📊 Stats", callback_data="stats")
+            ]
+        ]
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await self.telegram_app.bot.send_message(
+            chat_id=chat_id,
+            text="🤖 Welcome! Choose an option:",
+            reply_markup=reply_markup
+        )
+
+    async def _send_main_menu(self, chat_id: int):
+        """Send main menu with options."""
+        keyboard = [
+            [
+                InlineKeyboardButton("📝 Echo Test", callback_data="echo_test"),
+                InlineKeyboardButton("🔍 My Info", callback_data="my_info")
+            ],
+            [
+                InlineKeyboardButton("🎲 Random Fact", callback_data="random_fact"),
+                InlineKeyboardButton("⏰ Server Time", callback_data="server_time")
+            ],
+            [
+                InlineKeyboardButton("🔙 Back to Start", callback_data="back_to_start")
+            ]
+        ]
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await self.telegram_app.bot.send_message(
+            chat_id=chat_id,
+            text="📋 Main Menu - Select an option:",
+            reply_markup=reply_markup
+        )
