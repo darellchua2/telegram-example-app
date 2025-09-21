@@ -1,0 +1,22 @@
+services:
+  telegram-example-app:
+    build: .
+    image: telegram-example-app:latest
+    container_name: telegram-example-app
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    env_file:
+      - .env
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8000}
+      - AUTHORIZED_USERS=${AUTHORIZED_USERS}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
